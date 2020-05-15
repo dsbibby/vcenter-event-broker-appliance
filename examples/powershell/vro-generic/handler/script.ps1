@@ -1,3 +1,4 @@
+Add-Type -AssemblyName System.Web
 
 # Process function Secrets passed in
 $SECRETS_FILE = "/var/openfaas/secrets/vro-secrets"
@@ -9,30 +10,22 @@ if($env:function_debug -eq "true") {
     Write-Host "DEBUG: json=`"$($json | Format-List | Out-String)`""
 }
 
+$stringData = [System.Net.WebUtility]::HtmlEncode($args)
 # Requires a vRO workflow that takes a single string input parameter called "eventData"
 $body = @"
 {
     "parameters":
 	[
-#        {
-#            "value": {
-#                "sdk-object":{
-#                    "type": "VC:VirtualMachine",
-#                    "id": "$($vroVmId)"}
-#                },
-#            "type": "VC:VirtualMachine",
-#            "name": "vm",
-#            "scope": "local"
-#        },
         {
             "value": {
                 "string":{
-                    "value": "$($SECRETS_CONFIG.TAG_CATEGORY_NAME)"
+                    "value": "$($stringData)"
                 }
             },
             "type": "string",
             "name": "eventData",
             "scope": "local"
+	}
 	]
 }
 "@
