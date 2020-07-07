@@ -1,7 +1,7 @@
 version: 1.0
 provider:
   name: openfaas
-  gateway: http://veba.primp-industries.com
+  gateway: https://veba.lab.core.pilue.co.uk
 functions:
   veba-echo:
     lang: python
@@ -11,4 +11,4 @@ functions:
       write_debug: true
       read_debug: true
     annotations:
-      topic: "VmPoweredOnEvent,VmPoweredOffEvent"
+      topic: "DrsVmPoweredOnEvent,VmPoweredOnEvent,VmPoweredOffEvent,DvsPortLinkUpEvent,DatastoreRenamedEvent,DVPortgroupRenamedEvent,ResourcePoolCreatedEvent,DatastoreFileCopiedEvent"
