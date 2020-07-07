@@ -1,0 +1,21 @@
+version: 1.0
+provider:
+  name: openfaas
+  gateway: https://veba.lab.core.pilue.co.uk
+functions:
+  vro-generic:
+    lang: python3-flask
+    handler: ./vro-generic
+    image: pilue/vro-generic:latest
+    environment:
+      combine_output: false
+      write_debug: true
+      read_debug: true
+      insecure_ssl: true
+      vro_workflow_id: "2205ea6c-7b24-4389-b36d-1188c537d44d"
+      filter_vm: "Test VM"
+    secrets:
+      - vcconfig
+      - vroconfig
+    annotations:
+      topic: "DrsVmPoweredOnEvent,VmPoweredOffEvent"
