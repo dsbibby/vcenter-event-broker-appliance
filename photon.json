@@ -44,11 +44,20 @@
         "ethernet0.virtualDev": "vmxnet3",
         "ethernet0.addressType": "generated",
         "ethernet0.wakeOnPcktRcv": "FALSE",
-        "annotation": "Version: {{ user `version` }}"
+        "annotation": "Version: {{ user `VEBA_VERSION` }}"
       }
     }
   ],
   "provisioners": [
+    {
+      "type": "shell",
+      "inline": ["mkdir -p /root/config"]
+    },
+    {
+      "type": "file",
+      "source": "veba-bom.json",
+      "destination": "/root/config/veba-bom.json"
+    },
     {
       "type": "shell",
       "environment_vars": [
@@ -136,11 +145,6 @@
       "type": "file",
       "source": "files/tinywww-debug.yml",
       "destination": "/root/config/tinywww-debug.yml"
-    },
-    {
-      "type": "file",
-      "source": "files/kubeconfig.yml",
-      "destination": "/root/config/kubeconfig.yml"
     },
     {
       "type": "file",

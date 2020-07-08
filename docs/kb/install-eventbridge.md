@@ -25,7 +25,7 @@ Customers looking to seamlessly extend their vCenter through native AWS componen
 * Access credentials for AWS account
 * Details about the AWS EventBridge setup (Rules, Region etc) 
 
-### Step 1 - Download the VMware Event Broker Appliance (OVA) from the [VMware Fling site](https://flings.vmware.com/vcenter-event-broker-appliance){:target="_blank"}.
+### Step 1 - Download the VMware Event Broker Appliance (OVA) from the [VMware Fling site](https://flings.vmware.com/vmware-event-broker-appliance){:target="_blank"}.
 
 ### Step 2 - Deploy the VMware Event Broker Appliance OVA to your vCenter Server using the vSphere HTML5 Client. As part of the deployment you will be prompted to provide the following input:
 
@@ -40,16 +40,17 @@ Customers looking to seamlessly extend their vCenter through native AWS componen
   * NTP Server - NTP Server(s) for proper time synchronization. If you have multiple DNS Servers, input needs to be **space separated**.
 
 #### **Proxy Settings** (Optional)
-  * HTTP Proxy Server - HTTP Proxy Server followed by the port and without typing http:// before (e.g. proxy.provider.com:3128)
-  * HTTPS Proxy - HTTPS Proxy Server followed by the port and without typing https:// before (e.g. proxy.provider.com:3128)
+  * HTTP Proxy Server - HTTP Proxy Server followed by the port (e.g. http://proxy.provider.com:3128)
+  * HTTPS Proxy - HTTPS Proxy Server followed by the port (e.g. http(s)://proxy.provider.com:3128)
   * Proxy Username - Optional Username for Proxy Server
   * Proxy Password - Optional Password for Proxy Server
   * No Proxy - Exclude internal domain suffix. Comma separated (localhost, 127.0.0.1, domain.local)
 
 #### **OS Credentials** (**Required**)
   * Root Password - This is the OS root password for the VMware Event Broker Appliance
+  * Enable SSH - Check the box to allow SSH to the Appliance (SSH to the appliance is disabled by default)
 
-#### vSphere* (**Required**)
+#### **vSphere** (**Required**)
 
   * vCenter Server - This FQDN or IP Address of your vCenter Server that you wish to associate this VMware Event Broker Appliance to for Event subscription
   * vCenter Username - The username to login to vCenter Server, as mentioned earlier, readOnly account is sufficient
