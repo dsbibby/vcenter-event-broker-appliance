@@ -8,14 +8,14 @@ functions:
     handler: ./vro-generic
     image: pilue/vro-generic:latest
     environment:
-      combine_output: false
+      combine_output: true
       write_debug: true
       read_debug: true
       insecure_ssl: true
       vro_workflow_id: "2205ea6c-7b24-4389-b36d-1188c537d44d"
-      filter_vm: "Test VM"
+      filter_vm: ".*sexigraf"
     secrets:
       - vcconfig
       - vroconfig
     annotations:
-      topic: "DrsVmPoweredOnEvent,VmPoweredOffEvent"
+      topic: "DrsVmPoweredOnEvent,VmPoweredOnEvent,VmPoweredOffEvent"

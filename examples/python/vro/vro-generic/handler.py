@@ -23,9 +23,6 @@ service_instance = None
 vrohost = None
 vrouser = None
 vropass = None
-#vchost = None
-#vcuser = None
-#vcpass = None
 
 class bgc:
     HEADER = '\033[95m'
@@ -44,13 +41,14 @@ if(os.getenv("write_debug")):
 def debug(s):
     if DEBUG:
         sys.stderr.write(s+" \n") #Syserr only get logged on the console logs
-
+        sys.stderr.flush()
+        
 def init():
     """
     Load the config and set up a connection to vc
     """
     global service_instance,vchost,vrohost,vrouser,vropass
-    sys.stderr.write("Debug: "+str(DEBUG)+" \n")
+    
     # Load the Config File
     debug(f'{bgc.HEADER}Reading Configuration files: {bgc.ENDC}')
     debug(f'{bgc.OKBLUE}VC Config File > {bgc.ENDC}{VC_CONFIG}')
@@ -178,7 +176,7 @@ def getVroInputParam(item):
         item (tuple): event router event data parameter name, value pair
     """
     name, value = item
-    debug(f'Event key "{name}" -> type "{type(value).__name__}"')
+    #debug(f'Event key "{name}" -> type "{type(value).__name__}"')
     param = {
         "scope": "local"
     }
@@ -237,7 +235,6 @@ def handle(req):
         req (str): request body
     """
 
-    log = []
     if(os.getenv("insecure_ssl")):
         # Surpress SSL warnings
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -245,14 +242,13 @@ def handle(req):
     # Initialise a connection to vCenter if required
     try:
         vcinfo = service_instance.content.about
-        log.append({'INFO': f'Connected to {vcinfo.fullName} ({vcinfo.instanceUuid})'})
+        debug(f'Connected to {vcinfo.fullName} ({vcinfo.instanceUuid})')
     except:
-        log.append({'INFO' : 'Init VC Connection...'})
+        debug(f'{bgc.WARNING}Init VC Connection...{bgc.ENDC}')
         res = init()
         if isinstance(res, tuple): #Error state
             return res
         vcinfo = service_instance.content.about
-        log.append({'INFO': f'...connected to {vcinfo.fullName} ({vcinfo.instanceUuid})'})
     
     # Load the Events that function gets from vCenter through the Event Router
     debug(f'{bgc.HEADER}Reading Cloud Event: {bgc.ENDC}')
@@ -284,18 +280,21 @@ def handle(req):
         res = getVroInputParam(item)
         if res:
             if isinstance(res, tuple): # Tuple (rather than dict) is returned if the object didn't match the filter
-                log.append({'INFO': res[0]})
+                #log.append({'INFO': res[0]})
                 return json.dumps(log, indent=4), res[1]
             # Append the vRO parameter to the body
             body["parameters"].append(res)
-            log.append({'INFO': f'Passing vRO Param: {res["name"]} - type: {res["type"]}'})
+    body["parameters"].append(getVroInputParam(("rawEventData", json.dumps(cevent))))
+    #debug(f'REST body: {json.dumps(body, indent=4)}')
     
-    debug(f'REST body: {json.dumps(body, indent=4)}')
+    if DEBUG:
+        debug(f'{bgc.HEADER}Passing the following params to vRO:{bgc.ENDC}')
+        for p in body["parameters"]:
+            debug(f'Param: {p["name"]} - Type: {p["type"]}')
     
     wfId = os.getenv("vro_workflow_id")
     debug(f'Workflow ID: {wfId}')
     
-    log.append({'INFO': f'Calling vRO workflow with ID: {wfId}'})
     vroUrl = f'https://{vrohost}:443/vco/api/workflows/{wfId}/executions'
     
     debug(f'{bgc.HEADER}Attemping HTTP POST: {bgc.ENDC}')
@@ -308,22 +307,20 @@ def handle(req):
                   )
     except Exception as err:
         traceback.print_exc(limit=1, file=sys.stderr) #providing traceback since it helps debug the exact key that failed
-        log.append({'ERROR': 'Unexpected error occurred > Exception: {0}'.format(err)})
-        return json.dumps(log, indent=4), 500
+        return 'Unexpected error occurred > Exception: {0}'.format(err), 500
     
     debug(f'{bgc.OKBLUE}POST Successful...{bgc.ENDC}')
     try:
         vro_res = json.loads(r.text)
     except json.decoder.JSONDecodeError as err:
         traceback.print_exc(limit=1, file=sys.stderr) #providing traceback since it helps debug the exact key that failed
-        log.append({'ERROR': f'Response is not valid JSON\n{r.text}'})
-        return json.dumps(log, indent=4), r.status_code
+        return f'Response is not valid JSON\n{r.text}', r.status_code
     
-    debug(f'{bgc.OKBLUE}vRO Response: {bgc.ENDC}')
-    debug(json.dumps(vro_res, indent=2))
-    log.append({'INFO': f'Successfully executed vRO workflow: {vro_res["name"]}'})
-    return json.dumps(log, indent=4), r.status_code
-
+    #debug(f'{bgc.OKBLUE}vRO Response: {bgc.ENDC}')
+    #debug(json.dumps(vro_res))
+    
+    debug(f'Successfully executed vRO workflow: {vro_res["name"]}')
+    return r.text, r.status_code
 
 
 #
@@ -356,9 +353,9 @@ if __name__ == '__main__':
     # Standard : UserLogoutSessionEvent
     #r=handle('{"id":"17e1027a-c865-4354-9c21-e8da3df4bff9","source":"https://vcsa.pdotk.local/sdk","specversion":"1.0","type":"com.vmware.event.router/event","subject":"UserLogoutSessionEvent","time":"2020-04-14T00:28:36.455112549Z","data":{"Key":7775,"ChainId":7775,"CreatedTime":"2020-04-14T00:28:35.221698Z","UserName":"machine-b8eb9a7f","Datacenter":null,"ComputeResource":null,"Host":null,"Vm":null,"Ds":null,"Net":null,"Dvs":null,"FullFormattedMessage":"User machine-b8ebe7eb9a7f@127.0.0.1 logged out (login time: Tuesday, 14 April, 2020 12:28:35 AM, number of API invocations: 34, user agent: pyvmomi Python/3.7.5 (Linux; 4.19.84-1.ph3; x86_64))","ChangeTag":"","IpAddress":"127.0.0.1","UserAgent":"pyvmomi Python/3.7.5 (Linux; 4.19.84-1.ph3; x86_64)","CallCount":34,"SessionId":"52edf160927","LoginTime":"2020-04-14T00:28:35.071817Z"},"datacontenttype":"application/json"}')
     # Eventex : vim.event.ResourceExhaustionStatusChangedEvent
-    r=handle('{"id":"0707d7e0-269f-42e7-ae1c-18458ecabf3d","source":"https://vcsa.pdotk.local/sdk","specversion":"1.0","type":"com.vmware.event.router/eventex","subject":"vim.event.ResourceExhaustionStatusChangedEvent","time":"2020-04-14T00:20:15.100325334Z","data":{"Key":7715,"ChainId":7715,"CreatedTime":"2020-04-14T00:20:13.76967Z","UserName":"machine-bb9a7f","Datacenter":null,"ComputeResource":null,"Host":null,"Vm":null,"Ds":null,"Net":null,"Dvs":null,"FullFormattedMessage":"vCenter Log File System Resource status changed from Yellow to Green on vcsa.pdotk.local  ","ChangeTag":"","EventTypeId":"vim.event.ResourceExhaustionStatusChangedEvent","Severity":"info","Message":"","Arguments":[{"Key":"resourceName","Value":"storage_util_filesystem_log"},{"Key":"oldStatus","Value":"yellow"},{"Key":"newStatus","Value":"green"},{"Key":"reason","Value":" "},{"Key":"nodeType","Value":"vcenter"},{"Key":"_sourcehost_","Value":"vcsa.pdotk.local"}],"ObjectId":"","ObjectType":"","ObjectName":"","Fault":null},"datacontenttype":"application/json"}')
+    #r=handle('{"id":"0707d7e0-269f-42e7-ae1c-18458ecabf3d","source":"https://vcsa.pdotk.local/sdk","specversion":"1.0","type":"com.vmware.event.router/eventex","subject":"vim.event.ResourceExhaustionStatusChangedEvent","time":"2020-04-14T00:20:15.100325334Z","data":{"Key":7715,"ChainId":7715,"CreatedTime":"2020-04-14T00:20:13.76967Z","UserName":"machine-bb9a7f","Datacenter":null,"ComputeResource":null,"Host":null,"Vm":null,"Ds":null,"Net":null,"Dvs":null,"FullFormattedMessage":"vCenter Log File System Resource status changed from Yellow to Green on vcsa.pdotk.local  ","ChangeTag":"","EventTypeId":"vim.event.ResourceExhaustionStatusChangedEvent","Severity":"info","Message":"","Arguments":[{"Key":"resourceName","Value":"storage_util_filesystem_log"},{"Key":"oldStatus","Value":"yellow"},{"Key":"newStatus","Value":"green"},{"Key":"reason","Value":" "},{"Key":"nodeType","Value":"vcenter"},{"Key":"_sourcehost_","Value":"vcsa.pdotk.local"}],"ObjectId":"","ObjectType":"","ObjectName":"","Fault":null},"datacontenttype":"application/json"}')
     # Standard : DrsVmPoweredOnEvent
-    #r=handle('{"id":"c7a6c420-f25d-4e6d-95b5-e273202e1164","source":"https://vcsa01.lab.core.pilue.co.uk/sdk","specversion":"1.0","type":"com.vmware.event.router/event","subject":"DrsVmPoweredOnEvent","time":"2020-07-02T15:16:13.533866543Z","data":{"Key":130278,"ChainId":130273,"CreatedTime":"2020-07-02T15:16:11.213467Z","UserName":"Administrator","Datacenter":{"Name":"Pilue","Datacenter":{"Type":"Datacenter","Value":"datacenter-9"}},"ComputeResource":{"Name":"Lab","ComputeResource":{"Type":"ClusterComputeResource","Value":"domain-c47"}},"Host":{"Name":"esxi03.lab.core.pilue.co.uk","Host":{"Type":"HostSystem","Value":"host-3523"}},"Vm":{"Name":"sexigraf","Vm":{"Type":"VirtualMachine","Value":"vm-82"}},"Ds":null,"Net":null,"Dvs":null,"FullFormattedMessage":"DRS powered on sexigraf on esxi03.lab.core.pilue.co.uk in Pilue","ChangeTag":"","Template":false},"datacontenttype":"application/json"}')
+    r=handle('{"id":"c7a6c420-f25d-4e6d-95b5-e273202e1164","source":"https://vcsa01.lab.core.pilue.co.uk/sdk","specversion":"1.0","type":"com.vmware.event.router/event","subject":"DrsVmPoweredOnEvent","time":"2020-07-02T15:16:13.533866543Z","data":{"Key":130278,"ChainId":130273,"CreatedTime":"2020-07-02T15:16:11.213467Z","UserName":"Administrator","Datacenter":{"Name":"Pilue","Datacenter":{"Type":"Datacenter","Value":"datacenter-9"}},"ComputeResource":{"Name":"Lab","ComputeResource":{"Type":"ClusterComputeResource","Value":"domain-c47"}},"Host":{"Name":"esxi03.lab.core.pilue.co.uk","Host":{"Type":"HostSystem","Value":"host-3523"}},"Vm":{"Name":"sexigraf","Vm":{"Type":"VirtualMachine","Value":"vm-82"}},"Ds":null,"Net":null,"Dvs":null,"FullFormattedMessage":"DRS powered on sexigraf on esxi03.lab.core.pilue.co.uk in Pilue","ChangeTag":"","Template":false},"datacontenttype":"application/json"}')
     # Standard : VmPoweredOffEvent
     #r=handle('{"id":"d77a3767-1727-49a3-ac33-ddbdef294150","source":"https://vcsa.pdotk.local/sdk","specversion":"1.0","type":"com.vmware.event.router/event","subject":"VmPoweredOffEvent","time":"2020-04-14T00:33:30.838669841Z","data":{"Key":7825,"ChainId":7821,"CreatedTime":"2020-04-14T00:33:30.252792Z","UserName":"Administrator","Datacenter":{"Name":"PKLAB","Datacenter":{"Type":"Datacenter","Value":"datacenter-3"}},"ComputeResource":{"Name":"esxi01.pdotk.local","ComputeResource":{"Type":"ComputeResource","Value":"domain-s29"}},"Host":{"Name":"esxi01.pdotk.local","Host":{"Type":"HostSystem","Value":"host-31"}},"Vm":{"Name":"Test VM","Vm":{"Type":"VirtualMachine","Value":"vm-33"}},"Ds":null,"Net":null,"Dvs":null,"FullFormattedMessage":"Test VM on  esxi01.pdotk.local in PKLAB is powered off","ChangeTag":"","Template":false},"datacontenttype":"application/json"}')
     # Standard : DvsPortLinkUpEvent
@@ -369,4 +366,4 @@ if __name__ == '__main__':
     #r=handle('{"id":"aab77fd1-41ed-4b51-89d3-ef3924b09de1","source":"https://vcsa01.lab.core.pilue.co.uk/sdk","specversion":"1.0","type":"com.vmware.event.router/event","subject":"DVPortgroupRenamedEvent","time":"2020-07-03T19:36:38.474640186Z","data":{"Key":132376,"ChainId":132375,"CreatedTime":"2020-07-03T19:36:32.525906Z","UserName":"Administrator","Datacenter":{"Name":"Pilue","Datacenter":{"Type":"Datacenter","Value":"datacenter-2"}},"ComputeResource":null,"Host":null,"Vm":null,"Ds":null,"Net":{"Name":"vMotion AZ","Network":{"Type":"DistributedVirtualPortgroup","Value":"dvportgroup-3357"}},"Dvs":{"Name":"10G Switch A","Dvs":{"Type":"VmwareDistributedVirtualSwitch","Value":"dvs-3355"}},"FullFormattedMessage":"dvPort group vMotion A in Pilue was renamed to vMotion AZ","ChangeTag":"","OldName":"vMotion A","NewName":"vMotion AZ"},"datacontenttype":"application/json"}')
    
     print(f'Status code: {r[1]}')
-    print(r[0])
+    #print(r[0])
