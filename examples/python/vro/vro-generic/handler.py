@@ -20,6 +20,7 @@ DEBUG=False
 VC_CONFIG='/var/openfaas/secrets/vcconfig'
 VRO_CONFIG='/var/openfaas/secrets/vroconfig'
 service_instance = None
+vchost = None
 vrohost = None
 vrouser = None
 vropass = None
@@ -49,7 +50,7 @@ def init():
     """
     global service_instance,vchost,vrohost,vrouser,vropass
     
-    # Load the Config File
+    # Load the vc Config File
     debug(f'{bgc.HEADER}Reading Configuration files: {bgc.ENDC}')
     debug(f'{bgc.OKBLUE}VC Config File > {bgc.ENDC}{VC_CONFIG}')
     try:
@@ -63,6 +64,13 @@ def init():
     except KeyError as err:
         return 'Mandatory configuration key not found: {0}'.format(err), 500
     
+    try: # If we already have a valid session then return
+        sessionid = service_instance.content.sessionManager.currentSession.key
+        if service_instance.content.sessionManager.SessionIsActive(sessionid, vcuser):
+            return
+    except:
+        debug(f'{bgc.WARNING}Init VC Connection...{bgc.ENDC}')
+    
     debug(f'{bgc.OKBLUE}VRO Config File > {bgc.ENDC}{VRO_CONFIG}')
     try:
         with open(VRO_CONFIG, 'r') as vroconfigfile:
@@ -74,14 +82,12 @@ def init():
         return 'Could not read vro configuration: {0}'.format(err), 500
     except KeyError as err:
         return 'Mandatory configuration key not found: {0}'.format(err), 500
-        
-    debug(f'vrohost: {vrohost}')
     
     sslContext = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
     if(os.getenv("insecure_ssl")):
         sslContext.verify_mode = ssl.CERT_NONE
     
-    debug(f'{bgc.OKBLUE}Initialising vCenter connection{bgc.ENDC}')
+    debug(f'{bgc.OKBLUE}Initialising vCenter connection...{bgc.ENDC}')
     try:
         service_instance = connect.SmartConnect(host=vchost,
                                         user=vcuser,
@@ -239,16 +245,12 @@ def handle(req):
         # Surpress SSL warnings
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     
-    # Initialise a connection to vCenter if required
-    try:
-        vcinfo = service_instance.content.about
-        debug(f'Connected to {vcinfo.fullName} ({vcinfo.instanceUuid})')
-    except:
-        debug(f'{bgc.WARNING}Init VC Connection...{bgc.ENDC}')
-        res = init()
-        if isinstance(res, tuple): #Error state
-            return res
-        vcinfo = service_instance.content.about
+    # Initialise a connection to vCenter
+    res = init()
+    if isinstance(res, tuple): #Error state
+        return res
+    vcinfo = service_instance.RetrieveServiceContent().about
+    debug(f'Connected to {vcinfo.fullName} ({vcinfo.instanceUuid})')
     
     # Load the Events that function gets from vCenter through the Event Router
     debug(f'{bgc.HEADER}Reading Cloud Event: {bgc.ENDC}')
@@ -272,7 +274,7 @@ def handle(req):
         return 'Invalid JSON, data not iterable > AttributeError: {0}'.format(err), 400
     
     debug(f'{bgc.HEADER}All tests passed! Build vRO request:{bgc.ENDC}')
-    #Build the vRO input parameter object ysung the event parameters
+    #Build the vRO input parameter object using the event parameters
     body = {"parameters": []}
     for item in event.items():
         # Get the vRO input parameter correctly formatted for the received event data
@@ -280,8 +282,7 @@ def handle(req):
         res = getVroInputParam(item)
         if res:
             if isinstance(res, tuple): # Tuple (rather than dict) is returned if the object didn't match the filter
-                #log.append({'INFO': res[0]})
-                return json.dumps(log, indent=4), res[1]
+                return res
             # Append the vRO parameter to the body
             body["parameters"].append(res)
     body["parameters"].append(getVroInputParam(("rawEventData", json.dumps(cevent))))
