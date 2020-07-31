@@ -5,25 +5,18 @@ import os
 import urllib3
 import requests
 import toml
-import atexit
-import re
 import traceback
 from dateutil.parser import isoparse
-from pyVim import connect
-from pyVmomi import vim
-from pyVmomi import vmodl
 
 
 # GLOBAL_VARS
 DEBUG=False
 # CONFIG
-VC_CONFIG='/var/openfaas/secrets/vcconfig'
 VRO_CONFIG='/var/openfaas/secrets/vroconfig'
-service_instance = None
 vchost = None
-vrohost = None
-vrouser = None
-vropass = None
+#vrohost = None
+#vrouser = None
+#vropass = None
 
 class bgc:
     HEADER = '\033[95m'
@@ -43,136 +36,6 @@ def debug(s):
     if DEBUG:
         sys.stderr.write(s+" \n") #Syserr only get logged on the console logs
         sys.stderr.flush()
-        
-def init():
-    """
-    Load the config and set up a connection to vc
-    """
-    global service_instance,vchost,vrohost,vrouser,vropass
-    
-    # Load the vc Config File
-    debug(f'{bgc.HEADER}Reading Configuration files: {bgc.ENDC}')
-    debug(f'{bgc.OKBLUE}VC Config File > {bgc.ENDC}{VC_CONFIG}')
-    try:
-        with open(VC_CONFIG, 'r') as vcconfigfile:
-				        vcconfig = toml.load(vcconfigfile)
-				        vchost=vcconfig['vcenter']['server']
-				        vcuser=vcconfig['vcenter']['user']
-				        vcpass=vcconfig['vcenter']['pass']
-    except OSError as err:
-        return 'Could not read vcenter configuration: {0}'.format(err), 500
-    except KeyError as err:
-        return 'Mandatory configuration key not found: {0}'.format(err), 500
-    
-    try: # If we already have a valid session then return
-        sessionid = service_instance.content.sessionManager.currentSession.key
-        if service_instance.content.sessionManager.SessionIsActive(sessionid, vcuser):
-            return
-    except:
-        debug(f'{bgc.WARNING}Init VC Connection...{bgc.ENDC}')
-    
-    debug(f'{bgc.OKBLUE}VRO Config File > {bgc.ENDC}{VRO_CONFIG}')
-    try:
-        with open(VRO_CONFIG, 'r') as vroconfigfile:
-				        vroconfig = toml.load(vroconfigfile)
-				        vrohost=vroconfig['vro']['server']
-				        vrouser=vroconfig['vro']['user']
-				        vropass=vroconfig['vro']['pass']
-    except OSError as err:
-        return 'Could not read vro configuration: {0}'.format(err), 500
-    except KeyError as err:
-        return 'Mandatory configuration key not found: {0}'.format(err), 500
-    
-    sslContext = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-    if(os.getenv("insecure_ssl")):
-        sslContext.verify_mode = ssl.CERT_NONE
-    
-    debug(f'{bgc.OKBLUE}Initialising vCenter connection...{bgc.ENDC}')
-    try:
-        service_instance = connect.SmartConnect(host=vchost,
-                                        user=vcuser,
-                                        pwd=vcpass,
-                                        port=443,
-                                        sslContext=sslContext)
-        atexit.register(connect.Disconnect, service_instance)
-    except IOError as err:
-        return 'Error connecting to vCenter: {0}'.format(err), 500
-
-    if not service_instance:
-        return 'Unable to connect to vCenter host with supplied credentials', 400
-        
-        
-def getManagedObject(obj):
-    """
-    Convert an object as received from the event router in to a pyvmomi managed object
-    Args:
-        obj (object): object received from the event router
-    """
-    mo = None
-    try:
-        moref = obj['Value']
-        type = obj['Type']
-    except KeyError as err:
-        traceback.print_exc(limit=1, file=sys.stderr) #providing traceback since it helps debug the exact key that failed
-        return 'Invalid JSON, required key not found > KeyError: {0}'.format(err), 400
-        
-    if hasattr(vim, type):
-        typeMethod = getattr(vim, type)
-        mo = typeMethod(moref)
-        mo._stub = service_instance._stub
-        try:
-            debug(f'{bgc.OKBLUE}Managed object > {bgc.ENDC}{moref} has name {mo.name} and type {mo.__class__.__name__.rpartition(".")[2]}')
-            return mo
-        except vmodl.fault.ManagedObjectNotFound as err:
-            debug(f'{bgc.FAIL}{err.msg}{bgc.ENDC}')
-    return None
-    
-
-def getViObjectPath(obj):
-    """
-    Gets the full path to the passed managed object
-    Args:
-        obj (vim.ManagedObject): VC managed object
-    """
-    path = ""
-    while obj != service_instance.content.rootFolder:
-        path = f'/{obj.name}{path}'
-        obj = obj.parent
-    return path
-
-
-def filterVcObject(obj, filter):
-    """
-    Takes a VC managed object and tests it against a filter
-    If it matches, a vRO input parameter object is returned
-    Args:
-        obj (vim.ManagedObject): VC managed Object
-        filter (str): Regex filter string
-    """
-
-    if obj:
-        mo_type = obj.__class__.__name__.rpartition(".")[2]
-        res = {
-            "type": mo_type,
-            "name": mo_type,
-            "scope": "local",
-            "value": {
-                "sdk-object": {
-                    "type": mo_type,
-                    "id": f'{vchost},id:{obj._moId}'
-                }
-            }
-        }
-        if filter:
-            debug(f'{bgc.OKBLUE}{mo_type} Filter > {bgc.ENDC}{filter}')
-            objPath = getViObjectPath(obj)
-            debug(f'{bgc.OKBLUE}{mo_type} Path > {bgc.ENDC}{objPath}')
-            if not re.search(filter, objPath):
-                debug(f'{bgc.WARNING}Filter "{filter}" does not match {mo_type} path "{objPath}". Exiting{bgc.ENDC}')
-                res = f'Filter "{filter}" does not match {mo_type} path "{objPath}"', 200
-            else:
-                debug(f'{bgc.OKBLUE}Match > {bgc.ENDC}Filter matched {mo_type} path')
-        return res
 
 
 def getVroInputParam(item):
@@ -208,9 +71,13 @@ def getVroInputParam(item):
         for k, v in value.items():
             # search the items of the dict and look for contained dicts with a 'Type' property
             if type(v) == dict and 'Type' in v:
-                objFilter = eval(f'os.getenv("filter_{name.lower()}", default=".*")')
-                mo = getManagedObject(v)
-                param = filterVcObject(mo, objFilter)
+                param['type'] = v['Type']
+                param['value'] = {
+                    "sdk-object": {
+                        "type": v['Type'] ,
+                        "id": f'{vchost},id:{v["Value"]}'
+                    }
+                }
     
     elif type(value) == list:
         param['type'] = "Properties"
@@ -218,7 +85,8 @@ def getVroInputParam(item):
         for v in value:
             if 'Key' in v and 'Value' in v:
                 #pass the key and value to this function recursively to get a correctly structured value
-                properties.append({"key": v["Key"], "value": getVroInputParam((v["Key"],v["Value"]))["value"]})
+                vroParam = getVroInputParam((v["Key"],v["Value"]))
+                properties.append({"key": v["Key"], "value": vroParam["value"]})
         param['value'] = {"properties": {"property": properties}}
         
     elif value == None:
@@ -240,17 +108,23 @@ def handle(req):
     Args:
         req (str): request body
     """
-
+    global vchost
+    
     if(os.getenv("insecure_ssl")):
         # Surpress SSL warnings
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-    
-    # Initialise a connection to vCenter
-    res = init()
-    if isinstance(res, tuple): #Error state
-        return res
-    vcinfo = service_instance.RetrieveServiceContent().about
-    debug(f'Connected to {vcinfo.fullName} ({vcinfo.instanceUuid})')
+
+    debug(f'{bgc.OKBLUE}VRO Config File > {bgc.ENDC}{VRO_CONFIG}')
+    try:
+        with open(VRO_CONFIG, 'r') as vroconfigfile:
+				        vroconfig = toml.load(vroconfigfile)
+				        vrohost=vroconfig['vro']['server']
+				        vrouser=vroconfig['vro']['user']
+				        vropass=vroconfig['vro']['pass']
+    except OSError as err:
+        return 'Could not read vro configuration: {0}'.format(err), 500
+    except KeyError as err:
+        return 'Mandatory configuration key not found: {0}'.format(err), 500
     
     # Load the Events that function gets from vCenter through the Event Router
     debug(f'{bgc.HEADER}Reading Cloud Event: {bgc.ENDC}')
@@ -264,6 +138,7 @@ def handle(req):
     debug(f'{bgc.OKBLUE}Event > {bgc.ENDC}{json.dumps(cevent, indent=4, sort_keys=True)}')
     try:
         #CloudEvent - simple validation
+        source = cevent['source']
         event = cevent['data']
         event_items = event.items()
     except KeyError as err:
@@ -273,20 +148,17 @@ def handle(req):
         traceback.print_exc(limit=1, file=sys.stderr) #providing traceback since it helps debug the exact key that failed
         return 'Invalid JSON, data not iterable > AttributeError: {0}'.format(err), 400
     
+    vchost = urllib3.util.url.parse_url(source).host
     debug(f'{bgc.HEADER}All tests passed! Build vRO request:{bgc.ENDC}')
     #Build the vRO input parameter object using the event parameters
     body = {"parameters": []}
     for item in event.items():
         # Get the vRO input parameter correctly formatted for the received event data
-        # Filtering is also performed here
         res = getVroInputParam(item)
         if res:
-            if isinstance(res, tuple): # Tuple (rather than dict) is returned if the object didn't match the filter
-                return res
-            # Append the vRO parameter to the body
             body["parameters"].append(res)
     body["parameters"].append(getVroInputParam(("rawEventData", json.dumps(cevent))))
-    #debug(f'REST body: {json.dumps(body, indent=4)}')
+    debug(f'REST body: {json.dumps(body, indent=4)}')
     
     if DEBUG:
         debug(f'{bgc.HEADER}Passing the following params to vRO:{bgc.ENDC}')
@@ -311,16 +183,18 @@ def handle(req):
         return 'Unexpected error occurred > Exception: {0}'.format(err), 500
     
     debug(f'{bgc.OKBLUE}POST Successful...{bgc.ENDC}')
-    try:
-        vro_res = json.loads(r.text)
-    except json.decoder.JSONDecodeError as err:
-        traceback.print_exc(limit=1, file=sys.stderr) #providing traceback since it helps debug the exact key that failed
-        return f'Response is not valid JSON\n{r.text}', r.status_code
+    
+    if r.ok:
+        try:
+            vro_res = json.loads(r.text)
+        except json.decoder.JSONDecodeError as err:
+            traceback.print_exc(limit=1, file=sys.stderr) #providing traceback since it helps debug the exact key that failed
+            return f'Response is not valid JSON\n{r.text}', r.status_code
+        
+        debug(f'Successfully executed vRO workflow: {vro_res["name"]}')
     
     #debug(f'{bgc.OKBLUE}vRO Response: {bgc.ENDC}')
-    #debug(json.dumps(vro_res))
-    
-    debug(f'Successfully executed vRO workflow: {vro_res["name"]}')
+    debug(json.dumps(vro_res, indent=4))
     return r.text, r.status_code
 
 
@@ -366,5 +240,5 @@ if __name__ == '__main__':
     # Standard : DVPortgroupRenamedEvent
     #r=handle('{"id":"aab77fd1-41ed-4b51-89d3-ef3924b09de1","source":"https://vcsa01.lab.core.pilue.co.uk/sdk","specversion":"1.0","type":"com.vmware.event.router/event","subject":"DVPortgroupRenamedEvent","time":"2020-07-03T19:36:38.474640186Z","data":{"Key":132376,"ChainId":132375,"CreatedTime":"2020-07-03T19:36:32.525906Z","UserName":"Administrator","Datacenter":{"Name":"Pilue","Datacenter":{"Type":"Datacenter","Value":"datacenter-2"}},"ComputeResource":null,"Host":null,"Vm":null,"Ds":null,"Net":{"Name":"vMotion AZ","Network":{"Type":"DistributedVirtualPortgroup","Value":"dvportgroup-3357"}},"Dvs":{"Name":"10G Switch A","Dvs":{"Type":"VmwareDistributedVirtualSwitch","Value":"dvs-3355"}},"FullFormattedMessage":"dvPort group vMotion A in Pilue was renamed to vMotion AZ","ChangeTag":"","OldName":"vMotion A","NewName":"vMotion AZ"},"datacontenttype":"application/json"}')
    
-    print(f'Status code: {r[1]}')
+    print(f'Response status code: {r[1]}')
     #print(r[0])
