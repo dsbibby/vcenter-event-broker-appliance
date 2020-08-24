@@ -1,2 +1,4 @@
-python-dateutil
+urllib3
+requests
 toml
+python-dateutil
