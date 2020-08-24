@@ -14,9 +14,6 @@ DEBUG=False
 # CONFIG
 VRO_CONFIG='/var/openfaas/secrets/vroconfig'
 vchost = None
-#vrohost = None
-#vrouser = None
-#vropass = None
 
 class bgc:
     HEADER = '\033[95m'
@@ -193,8 +190,8 @@ def handle(req):
         
         debug(f'Successfully executed vRO workflow: {vro_res["name"]}')
     
-    #debug(f'{bgc.OKBLUE}vRO Response: {bgc.ENDC}')
-    debug(json.dumps(vro_res, indent=4))
+        #debug(f'{bgc.OKBLUE}vRO Response: {bgc.ENDC}')
+        #debug(json.dumps(vro_res, indent=4))
     return r.text, r.status_code
 
 
