@@ -1,4 +1,3 @@
-import ssl
 import sys
 import json
 import os
@@ -56,9 +55,9 @@ def getVroInputParam(item):
 
     elif isinstance(value, str):
         try:  # for strings, try and parse to a date first...
-            d = isoparse(value)
+            isoparse(value)
             param['type'] = "Date"
-            param['value'] = {"date": {"value": d}}
+            param['value'] = {"date": {"value": value}}
         except ValueError:  # ...if that doesn't work just build a string
             param['type'] = "string"
             param['value'] = {"string": {"value": value}}
@@ -71,10 +70,10 @@ def getVroInputParam(item):
         for v in value.values():
             # search the items of the dict and look for contained dicts with a 'Type' property
             if type(v) == dict and 'Type' in v:
-                param['type'] = v['Type']
+                param['type'] = f"VC:{v['Type']}"
                 param['value'] = {
                     "sdk-object": {
-                        "type": v['Type'],
+                        "type": param['type'],
                         "id": f'{vchost},id:{v["Value"]}'
                     }
                 }
@@ -174,7 +173,7 @@ def handle(req):
     try:
         # POST to vRO REST API
         r = requests.post(vroUrl,
-                          auth=(vrouser, vropass),
+                          auth=(vrouser.encode('utf-8'), vropass.encode('utf-8')),
                           json=body,
                           verify=not os.getenv("insecure_ssl")
                           )
@@ -187,16 +186,16 @@ def handle(req):
     if r.ok:
         try:
             vro_res = json.loads(r.text)
-        except json.decoder.JSONDecodeError as err:
+        except json.decoder.JSONDecodeError
             traceback.print_exc(limit=1, file=sys.stderr)  # providing traceback since it helps debug the exact key that failed
             return f'Response is not valid JSON\n{r.text}', r.status_code
 
         debug(f'Successfully executed vRO workflow: {vro_res["name"]}')
 
-        debug(f'{bgc.OKBLUE}vRO Response: {bgc.ENDC}')
-        debug(json.dumps(vro_res, indent=4))
+        # debug(f'{bgc.OKBLUE}vRO Response: {bgc.ENDC}')
+        # debug(json.dumps(vro_res, indent=4))
     else:
-        debug(r.text)
+        debug(f'{bgc.FAIL}Failed to execute workflow:{bgc.ENDC}')
     return r.text, r.status_code
 
 
@@ -206,11 +205,9 @@ def handle(req):
 #
 if __name__ == '__main__':
     VRO_CONFIG = 'vro-secrets.toml'
-    VC_CONFIG = 'vc-secrets.toml'
     DEBUG = True
     os.environ['insecure_ssl'] = 'true'
-    os.environ['filter_vm'] = '/Pilue/vm/Infrastructure/.*'
-    os.environ['vro_workflow_id'] = '2205ea6c-7b24-4389-b36d-1188c537d44d'
+    os.environ['vro_workflow_id'] = '5fff3097-61d4-4a5b-929c-9a1ce07ec195'
     #
     ## FAILURE CASES :Invalid Inputs
     #
@@ -228,19 +225,19 @@ if __name__ == '__main__':
     ## SUCCESS CASES
     #
     # Standard : UserLogoutSessionEvent
-    #r=handle('{"id":"17e1027a-c865-4354-9c21-e8da3df4bff9","source":"https://vcsa.pdotk.local/sdk","specversion":"1.0","type":"com.vmware.event.router/event","subject":"UserLogoutSessionEvent","time":"2020-04-14T00:28:36.455112549Z","data":{"Key":7775,"ChainId":7775,"CreatedTime":"2020-04-14T00:28:35.221698Z","UserName":"machine-b8eb9a7f","Datacenter":null,"ComputeResource":null,"Host":null,"Vm":null,"Ds":null,"Net":null,"Dvs":null,"FullFormattedMessage":"User machine-b8ebe7eb9a7f@127.0.0.1 logged out (login time: Tuesday, 14 April, 2020 12:28:35 AM, number of API invocations: 34, user agent: pyvmomi Python/3.7.5 (Linux; 4.19.84-1.ph3; x86_64))","ChangeTag":"","IpAddress":"127.0.0.1","UserAgent":"pyvmomi Python/3.7.5 (Linux; 4.19.84-1.ph3; x86_64)","CallCount":34,"SessionId":"52edf160927","LoginTime":"2020-04-14T00:28:35.071817Z"},"datacontenttype":"application/json"}')
+    #r=handle('{"id":"17e1027a-c865-4354-9c21-e8da3df4bff9","source":"https://vcsa01.lab.local/sdk","specversion":"1.0","type":"com.vmware.event.router/event","subject":"UserLogoutSessionEvent","time":"2020-04-14T00:28:36.455112549Z","data":{"Key":7775,"ChainId":7775,"CreatedTime":"2020-04-14T00:28:35.221698Z","UserName":"machine-b8eb9a7f","Datacenter":null,"ComputeResource":null,"Host":null,"Vm":null,"Ds":null,"Net":null,"Dvs":null,"FullFormattedMessage":"User machine-b8ebe7eb9a7f@127.0.0.1 logged out (login time: Tuesday, 14 April, 2020 12:28:35 AM, number of API invocations: 34, user agent: pyvmomi Python/3.7.5 (Linux; 4.19.84-1.ph3; x86_64))","ChangeTag":"","IpAddress":"127.0.0.1","UserAgent":"pyvmomi Python/3.7.5 (Linux; 4.19.84-1.ph3; x86_64)","CallCount":34,"SessionId":"52edf160927","LoginTime":"2020-04-14T00:28:35.071817Z"},"datacontenttype":"application/json"}')
     # Eventex : vim.event.ResourceExhaustionStatusChangedEvent
-    #r=handle('{"id":"0707d7e0-269f-42e7-ae1c-18458ecabf3d","source":"https://vcsa.pdotk.local/sdk","specversion":"1.0","type":"com.vmware.event.router/eventex","subject":"vim.event.ResourceExhaustionStatusChangedEvent","time":"2020-04-14T00:20:15.100325334Z","data":{"Key":7715,"ChainId":7715,"CreatedTime":"2020-04-14T00:20:13.76967Z","UserName":"machine-bb9a7f","Datacenter":null,"ComputeResource":null,"Host":null,"Vm":null,"Ds":null,"Net":null,"Dvs":null,"FullFormattedMessage":"vCenter Log File System Resource status changed from Yellow to Green on vcsa.pdotk.local  ","ChangeTag":"","EventTypeId":"vim.event.ResourceExhaustionStatusChangedEvent","Severity":"info","Message":"","Arguments":[{"Key":"resourceName","Value":"storage_util_filesystem_log"},{"Key":"oldStatus","Value":"yellow"},{"Key":"newStatus","Value":"green"},{"Key":"reason","Value":" "},{"Key":"nodeType","Value":"vcenter"},{"Key":"_sourcehost_","Value":"vcsa.pdotk.local"}],"ObjectId":"","ObjectType":"","ObjectName":"","Fault":null},"datacontenttype":"application/json"}')
+    #r=handle('{"id":"0707d7e0-269f-42e7-ae1c-18458ecabf3d","source":"https://vcsa01.lab.local/sdk","specversion":"1.0","type":"com.vmware.event.router/eventex","subject":"vim.event.ResourceExhaustionStatusChangedEvent","time":"2020-04-14T00:20:15.100325334Z","data":{"Key":7715,"ChainId":7715,"CreatedTime":"2020-04-14T00:20:13.76967Z","UserName":"machine-bb9a7f","Datacenter":null,"ComputeResource":null,"Host":null,"Vm":null,"Ds":null,"Net":null,"Dvs":null,"FullFormattedMessage":"vCenter Log File System Resource status changed from Yellow to Green on vcsa01.lab.local  ","ChangeTag":"","EventTypeId":"vim.event.ResourceExhaustionStatusChangedEvent","Severity":"info","Message":"","Arguments":[{"Key":"resourceName","Value":"storage_util_filesystem_log"},{"Key":"oldStatus","Value":"yellow"},{"Key":"newStatus","Value":"green"},{"Key":"reason","Value":" "},{"Key":"nodeType","Value":"vcenter"},{"Key":"_sourcehost_","Value":"vcsa01.lab.local"}],"ObjectId":"","ObjectType":"","ObjectName":"","Fault":null},"datacontenttype":"application/json"}')
     # Standard : DrsVmPoweredOnEvent
-    r=handle('{"id":"c7a6c420-f25d-4e6d-95b5-e273202e1164","source":"https://vcsa01.lab.core.pilue.co.uk/sdk","specversion":"1.0","type":"com.vmware.event.router/event","subject":"DrsVmPoweredOnEvent","time":"2020-07-02T15:16:13.533866543Z","data":{"Key":130278,"ChainId":130273,"CreatedTime":"2020-07-02T15:16:11.213467Z","UserName":"Administrator","Datacenter":{"Name":"Pilue","Datacenter":{"Type":"Datacenter","Value":"datacenter-9"}},"ComputeResource":{"Name":"Lab","ComputeResource":{"Type":"ClusterComputeResource","Value":"domain-c47"}},"Host":{"Name":"esxi03.lab.core.pilue.co.uk","Host":{"Type":"HostSystem","Value":"host-3523"}},"Vm":{"Name":"sexigraf","Vm":{"Type":"VirtualMachine","Value":"vm-82"}},"Ds":null,"Net":null,"Dvs":null,"FullFormattedMessage":"DRS powered on sexigraf on esxi03.lab.core.pilue.co.uk in Pilue","ChangeTag":"","Template":false},"datacontenttype":"application/json"}')
+    r=handle('{"id":"36715df0-28e8-4e75-bc38-5af1ce41f3fb","source":"https://vcsa01.lab.local/sdk","specversion":"1.0","type":"com.vmware.event.router/event","subject":"DrsVmPoweredOnEvent","time":"2020-08-24T13:28:34.782099207Z","data":{"Key":23763981,"ChainId":23763979,"CreatedTime":"2020-08-24T13:28:34.480388Z","UserName":"Administrator","Datacenter":{"Name":"Staging","Datacenter":{"Type":"Datacenter","Value":"datacenter-21"}},"ComputeResource":{"Name":"Staging","ComputeResource":{"Type":"ClusterComputeResource","Value":"domain-c26"}},"Host":{"Name":"esxi01.pdotk.local","Host":{"Type":"HostSystem","Value":"host-409"}},"Vm":{"Name":"Win 10 Client","Vm":{"Type":"VirtualMachine","Value":"vm-809"}},"Ds":null,"Net":null,"Dvs":null,"FullFormattedMessage":"DRS powered On Win 10 Client on esxi01.pdotk.local in  Staging","ChangeTag":"","Template":false},"datacontenttype":"application/json"}')
     # Standard : VmPoweredOffEvent
-    #r=handle('{"id":"d77a3767-1727-49a3-ac33-ddbdef294150","source":"https://vcsa.pdotk.local/sdk","specversion":"1.0","type":"com.vmware.event.router/event","subject":"VmPoweredOffEvent","time":"2020-04-14T00:33:30.838669841Z","data":{"Key":7825,"ChainId":7821,"CreatedTime":"2020-04-14T00:33:30.252792Z","UserName":"Administrator","Datacenter":{"Name":"PKLAB","Datacenter":{"Type":"Datacenter","Value":"datacenter-3"}},"ComputeResource":{"Name":"esxi01.pdotk.local","ComputeResource":{"Type":"ComputeResource","Value":"domain-s29"}},"Host":{"Name":"esxi01.pdotk.local","Host":{"Type":"HostSystem","Value":"host-31"}},"Vm":{"Name":"Test VM","Vm":{"Type":"VirtualMachine","Value":"vm-33"}},"Ds":null,"Net":null,"Dvs":null,"FullFormattedMessage":"Test VM on  esxi01.pdotk.local in PKLAB is powered off","ChangeTag":"","Template":false},"datacontenttype":"application/json"}')
+    #r=handle('{"id":"d77a3767-1727-49a3-ac33-ddbdef294150","source":"https://vcsa01.lab.local/sdk","specversion":"1.0","type":"com.vmware.event.router/event","subject":"VmPoweredOffEvent","time":"2020-04-14T00:33:30.838669841Z","data":{"Key":7825,"ChainId":7821,"CreatedTime":"2020-04-14T00:33:30.252792Z","UserName":"Administrator","Datacenter":{"Name":"PKLAB","Datacenter":{"Type":"Datacenter","Value":"datacenter-3"}},"ComputeResource":{"Name":"esxi01.pdotk.local","ComputeResource":{"Type":"ComputeResource","Value":"domain-s29"}},"Host":{"Name":"esxi01.pdotk.local","Host":{"Type":"HostSystem","Value":"host-31"}},"Vm":{"Name":"Test VM","Vm":{"Type":"VirtualMachine","Value":"vm-33"}},"Ds":null,"Net":null,"Dvs":null,"FullFormattedMessage":"Test VM on  esxi01.pdotk.local in PKLAB is powered off","ChangeTag":"","Template":false},"datacontenttype":"application/json"}')
     # Standard : DvsPortLinkUpEvent
-    #r=handle('{"id":"a10f8571-fc2a-40db-8df6-8284cecf5720","source":"https://vcsa01.lab.core.pilue.co.uk/sdk","specversion":"1.0","type":"com.vmware.event.router/event","subject":"DvsPortLinkUpEvent","time":"2020-07-02T15:16:13.43892986Z","data":{"Key":130277,"ChainId":130277,"CreatedTime":"2020-07-02T15:16:11.207727Z","UserName":"","Datacenter":{"Name":"Pilue","Datacenter":{"Type":"Datacenter","Value":"datacenter-2"}},"ComputeResource":null,"Host":null,"Vm":null,"Ds":null,"Net":null,"Dvs":{"Name":"Lab Switch","Dvs":{"Type":"VmwareDistributedVirtualSwitch","Value":"dvs-22"}},"FullFormattedMessage":"The dvPort 2 link was up in the vSphere Distributed Switch Lab Switch in Pilue","ChangeTag":"","PortKey":"2","RuntimeInfo":null},"datacontenttype":"application/json"}')
+    #r=handle('{"id":"a10f8571-fc2a-40db-8df6-8284cecf5720","source":"https://vcsa01.lab.local/sdk","specversion":"1.0","type":"com.vmware.event.router/event","subject":"DvsPortLinkUpEvent","time":"2020-07-02T15:16:13.43892986Z","data":{"Key":130277,"ChainId":130277,"CreatedTime":"2020-07-02T15:16:11.207727Z","UserName":"","Datacenter":{"Name":"Lab","Datacenter":{"Type":"Datacenter","Value":"datacenter-2"}},"ComputeResource":null,"Host":null,"Vm":null,"Ds":null,"Net":null,"Dvs":{"Name":"Lab Switch","Dvs":{"Type":"VmwareDistributedVirtualSwitch","Value":"dvs-22"}},"FullFormattedMessage":"The dvPort 2 link was up in the vSphere Distributed Switch Lab Switch in Lab","ChangeTag":"","PortKey":"2","RuntimeInfo":null},"datacontenttype":"application/json"}')
     # Standard : DatastoreRenamedEvent
-    #r=handle('{"id":"369b403a-6729-4b0b-893e-01383c8307ba","source":"https://vcsa01.lab.core.pilue.co.uk/sdk","specversion":"1.0","type":"com.vmware.event.router/event","subject":"DatastoreRenamedEvent","time":"2020-07-02T21:44:11.09338265Z","data":{"Key":130669,"ChainId":130669,"CreatedTime":"2020-07-02T21:44:08.578289Z","UserName":"","Datacenter":{"Name":"Pilue","Datacenter":{"Type":"Datacenter","Value":"datacenter-2"}},"ComputeResource":null,"Host":null,"Vm":null,"Ds":null,"Net":null,"Dvs":null,"FullFormattedMessage":"Renamed datastore from esxi04-local to esxi04-localZ in Pilue","ChangeTag":"","Datastore":{"Name":"esxi04-localZ","Datastore":{"Type":"Datastore","Value":"datastore-3313"}},"OldName":"esxi04-local","NewName":"esxi04-localZ"},"datacontenttype":"application/json"}')
+    #r=handle('{"id":"369b403a-6729-4b0b-893e-01383c8307ba","source":"https://vcsa01.lab.local/sdk","specversion":"1.0","type":"com.vmware.event.router/event","subject":"DatastoreRenamedEvent","time":"2020-07-02T21:44:11.09338265Z","data":{"Key":130669,"ChainId":130669,"CreatedTime":"2020-07-02T21:44:08.578289Z","UserName":"","Datacenter":{"Name":"Lab","Datacenter":{"Type":"Datacenter","Value":"datacenter-2"}},"ComputeResource":null,"Host":null,"Vm":null,"Ds":null,"Net":null,"Dvs":null,"FullFormattedMessage":"Renamed datastore from esxi04-local to esxi04-localZ in Lab","ChangeTag":"","Datastore":{"Name":"esxi04-localZ","Datastore":{"Type":"Datastore","Value":"datastore-3313"}},"OldName":"esxi04-local","NewName":"esxi04-localZ"},"datacontenttype":"application/json"}')
     # Standard : DVPortgroupRenamedEvent
-    #r=handle('{"id":"aab77fd1-41ed-4b51-89d3-ef3924b09de1","source":"https://vcsa01.lab.core.pilue.co.uk/sdk","specversion":"1.0","type":"com.vmware.event.router/event","subject":"DVPortgroupRenamedEvent","time":"2020-07-03T19:36:38.474640186Z","data":{"Key":132376,"ChainId":132375,"CreatedTime":"2020-07-03T19:36:32.525906Z","UserName":"Administrator","Datacenter":{"Name":"Pilue","Datacenter":{"Type":"Datacenter","Value":"datacenter-2"}},"ComputeResource":null,"Host":null,"Vm":null,"Ds":null,"Net":{"Name":"vMotion AZ","Network":{"Type":"DistributedVirtualPortgroup","Value":"dvportgroup-3357"}},"Dvs":{"Name":"10G Switch A","Dvs":{"Type":"VmwareDistributedVirtualSwitch","Value":"dvs-3355"}},"FullFormattedMessage":"dvPort group vMotion A in Pilue was renamed to vMotion AZ","ChangeTag":"","OldName":"vMotion A","NewName":"vMotion AZ"},"datacontenttype":"application/json"}')
+    #r=handle('{"id":"aab77fd1-41ed-4b51-89d3-ef3924b09de1","source":"https://vcsa01.lab.local/sdk","specversion":"1.0","type":"com.vmware.event.router/event","subject":"DVPortgroupRenamedEvent","time":"2020-07-03T19:36:38.474640186Z","data":{"Key":132376,"ChainId":132375,"CreatedTime":"2020-07-03T19:36:32.525906Z","UserName":"Administrator","Datacenter":{"Name":"Lab","Datacenter":{"Type":"Datacenter","Value":"datacenter-2"}},"ComputeResource":null,"Host":null,"Vm":null,"Ds":null,"Net":{"Name":"vMotion AZ","Network":{"Type":"DistributedVirtualPortgroup","Value":"dvportgroup-3357"}},"Dvs":{"Name":"10G Switch A","Dvs":{"Type":"VmwareDistributedVirtualSwitch","Value":"dvs-3355"}},"FullFormattedMessage":"dvPort group vMotion A in Lab was renamed to vMotion AZ","ChangeTag":"","OldName":"vMotion A","NewName":"vMotion AZ"},"datacontenttype":"application/json"}')
 
-    print(f'Response status code: {r[1]}')
+    print(f'Response status code: {r[1]} - {r[0]}')
     #print(r[0])

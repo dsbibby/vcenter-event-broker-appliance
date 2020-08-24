@@ -1,17 +1,17 @@
 version: 1.0
 provider:
   name: openfaas
-  gateway: https://veba.lab.core.pilue.co.uk
+  gateway: https://VEBA_FQDN_OR_IP
 functions:
-  vro-generic:
-    lang: python3-flask
-    handler: ./vro-generic
-    image: pilue/vro-generic:latest
+  python-vro:
+    lang: python3
+    handler: ./vro
+    image: pilue/veba-python-vro:latest
     environment:
       write_debug: true
       read_debug: true
       insecure_ssl: true
-      vro_workflow_id: "2205ea6c-7b24-4389-b36d-1188c537d44d"
+      vro_workflow_id: "VRO_WORKFLOW_ID"
     secrets:
       - vroconfig
     annotations:
