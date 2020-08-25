@@ -186,7 +186,7 @@ def handle(req):
     if r.ok:
         try:
             vro_res = json.loads(r.text)
-        except json.decoder.JSONDecodeError
+        except json.decoder.JSONDecodeError:
             traceback.print_exc(limit=1, file=sys.stderr)  # providing traceback since it helps debug the exact key that failed
             return f'Response is not valid JSON\n{r.text}', r.status_code
 
