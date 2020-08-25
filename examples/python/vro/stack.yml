@@ -4,7 +4,7 @@ provider:
   gateway: https://VEBA_FQDN_OR_IP
 functions:
   python-vro:
-    lang: python3
+    lang: python3-flask
     handler: ./vro
     image: pilue/veba-python-vro:latest
     environment:
