@@ -1,4 +1,5 @@
 [vro]
-server = "vro01.lab.core.pilue.co.uk"
-user = "administrator@vsphere.local"
-pass = "VMware1!"
+server = "VRO_FQDN_OR_IP"
+port = 443
+user = "VRO_USERNAME"
+pass = "VRO_PASSWORD"
